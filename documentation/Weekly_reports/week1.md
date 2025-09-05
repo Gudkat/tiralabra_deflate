@@ -13,4 +13,5 @@ Mostly I spent time this week reading wikipedia articles and watching youtube vi
 
 ## Questions
 
-The entire deflate algorithm execution such as it is used in gzip etc. seems to be quite a lot of work. In the video ([This one](https://www.youtube.com/watch?v=SJPvNi4HrWQ)) I linked in the specification.md document they mention difficulty about some of the huffman encoding not fitting within 15 bit space that is allocated to those. Would it be considered a detriment to leave the specification document as is and work on huffman and LZ77 first, then create a deflate using fixed table for symbols instead of working on a dynamic one for that? 
+* The entire deflate algorithm execution such as it is used in gzip etc. seems to be quite a lot of work. In the video ([This one](https://www.youtube.com/watch?v=SJPvNi4HrWQ)) I linked in the specification.md document they mention difficulty about some of the huffman encoding not fitting within 15 bit space that is allocated to those. Would it be considered a detriment to leave the specification document as is and work on huffman and LZ77 first, then create a deflate using fixed table for symbols instead of working on a dynamic one for that? 
+* I don't really find much benefit for actual user interface for this project. Is it okay to just have it run in CLI with args..?
