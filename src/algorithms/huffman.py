@@ -35,32 +35,30 @@ class Huffman:
     * decode method missing
     '''
 
-    def __add_nodes(self, nodes):
-        node_counts = Counter(nodes)
+    def __iterable_to_heap(self, iterable):
+        node_counts = Counter(iterable)
+        nodes  = [Node(value, name) for name, value in node_counts.items()]
+        heapq.heapify(nodes)
 
-        # Check if it's better to 
-        # as_nodes = [Node(value, name) for value,name in node_count.items()]
-        # self.__heap = heapq.heapify(as_nodes)
+        return nodes
 
-        for name, value in node_counts.items():
-            heapq.heappush(self.__heap, Node(value, name))
+        # Above is probably O(n) and below is O(n log n)
+        # for name, value in node_counts.items():
+        #     heapq.heappush(heap, Node(value, name))
 
-    def __create_tree(self):
-        while len(self.__heap) != 1:
-            right, left = heapq.heappop(self.__heap), heapq.heappop(self.__heap)
+    def __create_tree(self, heap: list):
+        while len(heap) > 1:
+            # Take 2 lowest frequency items from heap and merge them to parent node in tree until only root remains
+            right, left = heapq.heappop(heap), heapq.heappop(heap)
             new_node = Node(
                 value=left.value + right.value,
                 node_name=right.name + left.name,
                 right=right,
                 left=left,
             )
+            heapq.heappush(heap, new_node)
 
-            # return root of huffman tree if the tree is complete
-            if not self.__heap:
-                return new_node
-
-            # otherwise add the parent node back to heap
-            heapq.heappush(self.__heap, new_node)
+        return heap[0]
 
     @classmethod
     def __create_codes(cls, node, codes:dict):
@@ -76,35 +74,77 @@ class Huffman:
         cls.__create_codes(node.left, codes)
 
     def encode(self, iterable):
-        self.__heap = []
+        '''
+        Encoding format is: 
+            First 2 bytes is for the size of huffmantree in bytes
+            The following is the huffmantree. 
+                The encoding of the huffmantree has 2 bits for every symbol denoting how many bytes is used for the symbol.
+                00 for 1 byte, 01 for 2 bytes, 10 for 3 bytes and 11 for 4 bytes
+            Encoded content
+        '''
         codes = {}
-        encoded_tree = bitarray()
-        encoded_content = bitarray()
+        compression = bitarray()
+        huffman_in_bits = bitarray()
+        content_in_bits = bitarray()
+        # TODO: Change the used space for the huffman tree to dynamic size. For now 2 bytes.
 
-        self.__add_nodes(iterable)
-        root = self.__create_tree()
-        self.__create_codes(root, codes)
+        heap = self.__iterable_to_heap(iterable)
+        huffman_root = self.__create_tree(heap)
 
-        self.__encodeNode(root, encoded_tree)
+        self.__create_codes(huffman_root, codes)
+        self.__encodeNode(huffman_root, huffman_in_bits)
 
-        for symbol in iterable:
-            encoded_content.extend(codes[symbol])
+        # fill method padds the bytes with zeros. 
+        # We need this so that the size of the huffmantree section can be separated from the compressed content
+        # alternatively calculate required filler bits... extend((8 - (len(huffman_in_bits) % 8) * '0')
+        huffman_in_bits.fill()
 
+        # +7 so that the floor division for 8 emulates ceil division. 
+        # There exists method in the bitarray for this but I'm not sure 
+        # how widely I shold use premade libraries
 
-        print(encoded_tree)
-        return encoded_tree.extend(encoded_content)
+        size_of_huffman_tree_int = (len(huffman_in_bits) + 7) // 8
+
+        # restrict to 2 bytes. 
+        # TODO: Change the size denomination to dynamic size instead of fixed 2 bytes
+        if size_of_huffman_tree_int > (1 << 16) -1:
+            raise ValueError(f'Compression doesnt work with this many symbols.')
+
+        how_much_space_for_huffmantree = bitarray(f'{size_of_huffman_tree_int:016b}')
+        
+        self.__encode_content(iterable, codes, content_in_bits)
+        content_in_bits.fill()
+
+        compression.extend(how_much_space_for_huffmantree)
+        compression.extend(huffman_in_bits)
+        compression.extend(content_in_bits)
+
+        return compression
 
     def decode(self, encodedbits):
         raise NotImplementedError
 
+    def __encode_content(self, iterable, codes:dict, content_in_bits:bitarray):
+        for symbol in iterable:
+            content_in_bits.extend(codes[symbol])
+
     def __encodeNode(self, node:Node, encoded_tree):
         # Encoding huffman tree is based on 
         # https://stackoverflow.com/questions/759707/efficient-way-of-storing-huffman-tree
-        print(encoded_tree)
-
+        
         if node.is_leaf:
             encoded_tree.extend('1')
-            encoded_tree.extend(format(b, '08b') for b in node.name.encode('utf-8'))
+            utf8_bytes = node.name.encode('utf-8')
+
+            # We know that we require at minimum 1 byte and at maximum 4 bytes in utf-8
+            # if we use the actual number for how many bytes are required, 
+            # we need 3 bits to represent number 4 (100) but we never need 0 bytes, so we can use -1 here.
+            # For example, when utf-8 encoding needs 1 byte, we write byte length 00.
+
+            how_many_bytes_in_utf8 = f'{len(utf8_bytes)-1:02b}'
+
+            encoded_tree.extend(how_many_bytes_in_utf8)
+            encoded_tree.frombytes(utf8_bytes)            
         else:
             encoded_tree.extend('0')
             self.__encodeNode(node.left, encoded_tree)
@@ -112,8 +152,11 @@ class Huffman:
 
 
 if __name__ == "__main__":
-    test_string = "A"
 
+    with open("../../testdata/bible.txt") as f:
+        test_string = f.read()
     huffman = Huffman()
     encoded_bin = huffman.encode(test_string)
+    print(len(test_string), len(encoded_bin) >> 3)
+
 
