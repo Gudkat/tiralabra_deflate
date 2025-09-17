@@ -33,6 +33,7 @@ class Huffman:
     TODO: 
     * Include the codes for the binary encodings
     * decode method missing
+    * Tree encoding fails if only 1 kind of symbol in input
     '''
 
     def __iterable_to_heap(self, iterable):
@@ -73,7 +74,7 @@ class Huffman:
         cls.__create_codes(node.right, codes)
         cls.__create_codes(node.left, codes)
 
-    def encode(self, iterable):
+    def encode(self, iterable, filename):
         '''
         Encoding format is: 
             First 2 bytes is for the size of huffmantree in bytes
@@ -86,7 +87,6 @@ class Huffman:
         compression = bitarray()
         huffman_in_bits = bitarray()
         content_in_bits = bitarray()
-        # TODO: Change the used space for the huffman tree to dynamic size. For now 2 bytes.
 
         heap = self.__iterable_to_heap(iterable)
         huffman_root = self.__create_tree(heap)
@@ -119,13 +119,49 @@ class Huffman:
         compression.extend(huffman_in_bits)
         compression.extend(content_in_bits)
 
-        return compression
+        self.__save_binary_file(filename, compression)
 
-    def decode(self, encodedbits):
-        raise NotImplementedError
+    def decode(self, filename):
+        '''
+        Decodes huffman encoding in the format specified in encode method.
+
+        Example of huffman tree encoding (010001100001100011000100):
+            0 -not a leaf
+            1 - leaf
+            00 - 1 byte symbol
+            01100001 - utf-8 encoding of symbol a
+            1 - leaf
+            00 - 1 byte symbol
+            01100010 - utf-8 encoding of symbol b
+            0 - padding
+        '''
+
+        encoded_bits = self.__load_binary_file(filename)
+        print("entire encoded binary", encoded_bits.to01())
+
+        '''
+
+        '''
+
+        size_of_huffman_tree = int(encoded_bits[:16].to01(), 2) * 8
+        print("size_of_huffman_tree in bits", size_of_huffman_tree)
+
+        huffman_tree_bits = encoded_bits[16:16+size_of_huffman_tree]
+        content_bits = encoded_bits[16+size_of_huffman_tree:]
+    
+        #print huffmanbits as 1's and 0's
+        print("tree bits", huffman_tree_bits.to01())
+
+        pointer = 0
+        self.__decodeNode(huffman_tree_bits, pointer, size_of_huffman_tree)
+
+            
+
+        print("content bits", content_bits.to01())
 
     def __encode_content(self, iterable, codes:dict, content_in_bits:bitarray):
         for symbol in iterable:
+            print("symbol", symbol, "code", codes[symbol].to01())
             content_in_bits.extend(codes[symbol])
 
     def __encodeNode(self, node:Node, encoded_tree):
@@ -150,13 +186,51 @@ class Huffman:
             self.__encodeNode(node.left, encoded_tree)
             self.__encodeNode(node.right, encoded_tree)
 
+    def __decodeNode(self, bin: bitarray, pointer: int, size_of_huffman_tree):
+        while pointer < size_of_huffman_tree:
+            if bin[pointer]:
+                # this is a leaf
+
+                #move pointer to read the length of the symbol
+                pointer += 1
+
+
+                how_many_bytes_for_symbol = int(bin[pointer:pointer+2].to01()) + 1
+                how_many_bits_for_symbol = how_many_bytes_for_symbol * 8
+
+                # move pointer to read the actual symbol
+                pointer += 2
+                
+                print(bin[pointer:pointer+how_many_bits_for_symbol].tobytes().decode('utf-8'))
+
+                exit()
+            else:
+                # this is not a leaf
+                print(True)
+
+            pointer += 1
+
+    @classmethod
+    def __save_binary_file(cls, filename, bits:bitarray):
+        with open(filename, 'wb') as file:
+            bits.tofile(file)
+
+    @classmethod
+    def __load_binary_file(cls, filename):
+        with open(filename, 'rb') as file:
+            bits = bitarray()
+            bits.fromfile(file)
+        return bits
 
 if __name__ == "__main__":
 
-    with open("../../testdata/bible.txt") as f:
-        test_string = f.read()
+    if False:
+        with open("../../testdata/bible.txt") as f:
+            test_string = f.read()
+        huffman = Huffman()
+        encoded_bin = huffman.encode(test_string)
+        print(len(test_string), len(encoded_bin) >> 3)
+
     huffman = Huffman()
-    encoded_bin = huffman.encode(test_string)
-    print(len(test_string), len(encoded_bin) >> 3)
-
-
+    encoded = huffman.encode("abaa", "test.bin")
+    huffman.decode("test.bin")
