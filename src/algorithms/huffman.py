@@ -11,6 +11,10 @@ class Node:
         self.right = right
         self.name = node_name
 
+        # TODO: Clean up structure of nodes. Does the tree still need values? 
+        # Does it make sense to even save bits of the node instead of traversing 
+        # the tree every time
+
     # Comparision required for heap.
     # If same freq, we go based on alphabets
     # Might be better to make secondary ordering based on how many chars in name
@@ -137,31 +141,27 @@ class Huffman:
         '''
 
         encoded_bits = self.__load_binary_file(filename)
-        print("entire encoded binary", encoded_bits.to01())
-
-        '''
-
-        '''
+        # print("entire encoded binary", encoded_bits.to01())
 
         size_of_huffman_tree = int(encoded_bits[:16].to01(), 2) * 8
-        print("size_of_huffman_tree in bits", size_of_huffman_tree)
+        # print("size_of_huffman_tree in bits", size_of_huffman_tree)
 
         huffman_tree_bits = encoded_bits[16:16+size_of_huffman_tree]
         content_bits = encoded_bits[16+size_of_huffman_tree:]
     
         #print huffmanbits as 1's and 0's
-        print("tree bits", huffman_tree_bits.to01())
+        # print("tree bits", huffman_tree_bits.to01())
 
         pointer = 0
         self.__decodeNode(huffman_tree_bits, pointer, size_of_huffman_tree)
 
             
 
-        print("content bits", content_bits.to01())
+        # print("content bits", content_bits.to01())
 
     def __encode_content(self, iterable, codes:dict, content_in_bits:bitarray):
         for symbol in iterable:
-            print("symbol", symbol, "code", codes[symbol].to01())
+            # print("symbol", symbol, "code", codes[symbol].to01())
             content_in_bits.extend(codes[symbol])
 
     def __encodeNode(self, node:Node, encoded_tree):
@@ -201,14 +201,25 @@ class Huffman:
                 # move pointer to read the actual symbol
                 pointer += 2
                 
-                print(bin[pointer:pointer+how_many_bits_for_symbol].tobytes().decode('utf-8'))
+                symbol = bin[pointer:pointer+how_many_bits_for_symbol].tobytes().decode('utf-8')
 
-                exit()
+                # move pointer to start of next node in tree
+                pointer += how_many_bits_for_symbol
+
+                return Node(value=0, node_name=symbol), pointer
             else:
-                # this is not a leaf
-                print(True)
+                # This node is not a leaf.
 
-            pointer += 1
+                #move pointer to the start of next node in tree
+                pointer += 1
+
+                # All non-leaf nodes have 2 childs
+                left, pointer = self.__decodeNode(bin, pointer, size_of_huffman_tree)
+                right, pointer = self.__decodeNode(bin, pointer, size_of_huffman_tree)
+
+
+                return Node(node_name="", value=0, left=left, right=right), pointer
+
 
     @classmethod
     def __save_binary_file(cls, filename, bits:bitarray):
@@ -232,5 +243,5 @@ if __name__ == "__main__":
         print(len(test_string), len(encoded_bin) >> 3)
 
     huffman = Huffman()
-    encoded = huffman.encode("abaa", "test.bin")
+    encoded = huffman.encode("abcdefghijk", "test.bin")
     huffman.decode("test.bin")
