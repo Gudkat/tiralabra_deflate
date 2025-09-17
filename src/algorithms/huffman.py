@@ -31,6 +31,34 @@ class Node:
         return f"name: {self.name}, value: {self.value}"
 
 
+class BitReader:
+    def __init__(self, binary:bitarray):
+        self.binary = binary
+        self.pointer = 0
+        self.huffman_size = self.__get_huffman_size()
+
+    def __get_huffman_size(self):
+        self.pointer = 16
+        return int(self.binary[:16].to01(), 2) * 8
+
+    def __get_length_of_next_symbol(self):
+        how_many_bytes_for_symbol = int(self.binary[self.pointer:self.pointer+2].to01()) + 1
+        self.pointer += 2
+        return how_many_bytes_for_symbol
+    
+    def read_next_node(self) -> bytes:
+        num_of_bytes = self.__get_length_of_next_symbol()
+        symbol_bytes = self.binary[self.pointer:self.pointer+num_of_bytes*8].tobytes()
+        self.pointer += num_of_bytes * 8
+        return symbol_bytes
+    
+    @property
+    def next_node_is_leaf(self):
+        bit_value = self.binary[self.pointer]
+        self.pointer += 1
+        return bit_value
+
+
 class Huffman:
     '''
     Encodes huffman coding for iterable input. encode method accepts iterables and returns a tuple; first item encoded bits and 2nd item encoding "table"
@@ -38,6 +66,7 @@ class Huffman:
     * Include the codes for the binary encodings
     * decode method missing
     * Tree encoding fails if only 1 kind of symbol in input
+    * Modify to iterate bytes instead of text
     '''
 
     def __iterable_to_heap(self, iterable):
@@ -125,6 +154,8 @@ class Huffman:
 
         self.__save_binary_file(filename, compression)
 
+        return codes
+
     def decode(self, filename):
         '''
         Decodes huffman encoding in the format specified in encode method.
@@ -143,21 +174,27 @@ class Huffman:
         encoded_bits = self.__load_binary_file(filename)
         # print("entire encoded binary", encoded_bits.to01())
 
-        size_of_huffman_tree = int(encoded_bits[:16].to01(), 2) * 8
+        bit_reader = BitReader(encoded_bits)
+        # size_of_huffman_tree = int(encoded_bits[:16].to01(), 2) * 8
         # print("size_of_huffman_tree in bits", size_of_huffman_tree)
 
-        huffman_tree_bits = encoded_bits[16:16+size_of_huffman_tree]
-        content_bits = encoded_bits[16+size_of_huffman_tree:]
+        # huffman_tree_bits = encoded_bits[16:16+size_of_huffman_tree]
+        content_bits = encoded_bits[16+bit_reader.huffman_size:]
     
         #print huffmanbits as 1's and 0's
         # print("tree bits", huffman_tree_bits.to01())
 
-        pointer = 0
-        self.__decodeNode(huffman_tree_bits, pointer, size_of_huffman_tree)
-
-            
+        # pointer = 0
+        # TODO: Change code reader to external class to avoid injecting pointer
+        # self.__decodeNode(huffman_tree_bits, pointer, size_of_huffman_tree)
 
         # print("content bits", content_bits.to01())
+        huffman_root = self.__decodeNode(bit_reader)
+        
+        codes = {}
+        self.__create_codes(huffman_root, codes)
+
+        return codes
 
     def __encode_content(self, iterable, codes:dict, content_in_bits:bitarray):
         for symbol in iterable:
@@ -186,39 +223,46 @@ class Huffman:
             self.__encodeNode(node.left, encoded_tree)
             self.__encodeNode(node.right, encoded_tree)
 
-    def __decodeNode(self, bin: bitarray, pointer: int, size_of_huffman_tree):
-        while pointer < size_of_huffman_tree:
-            if bin[pointer]:
-                # this is a leaf
+    def __decodeNode(self, bit_reader: BitReader):
+        if bit_reader.next_node_is_leaf:
+            node_name_in_bytes = bit_reader.read_next_node()
+            node_name = node_name_in_bytes.decode('utf-8')
+            return Node(value=0, node_name=node_name)
+        else:
+            left, right = self.__decodeNode(bit_reader), self.__decodeNode(bit_reader)
+            # place holder value and name. They are not really needed. Need to clean up Node class
+            return Node(value=0, node_name='', left=left, right=right)
 
-                #move pointer to read the length of the symbol
-                pointer += 1
+        # while pointer < size_of_huffman_tree:
+        #     if bin[pointer]:
+        #         # this is a leaf
 
+        #         #move pointer to read the length of the symbol
+        #         pointer += 1
 
-                how_many_bytes_for_symbol = int(bin[pointer:pointer+2].to01()) + 1
-                how_many_bits_for_symbol = how_many_bytes_for_symbol * 8
+        #         how_many_bytes_for_symbol = int(bin[pointer:pointer+2].to01()) + 1
+        #         how_many_bits_for_symbol = how_many_bytes_for_symbol * 8
 
-                # move pointer to read the actual symbol
-                pointer += 2
+        #         # move pointer to read the actual symbol
+        #         pointer += 2
                 
-                symbol = bin[pointer:pointer+how_many_bits_for_symbol].tobytes().decode('utf-8')
+        #         symbol = bin[pointer:pointer+how_many_bits_for_symbol].tobytes().decode('utf-8')
 
-                # move pointer to start of next node in tree
-                pointer += how_many_bits_for_symbol
+        #         # move pointer to start of next node in tree
+        #         pointer += how_many_bits_for_symbol
 
-                return Node(value=0, node_name=symbol), pointer
-            else:
-                # This node is not a leaf.
+        #         return Node(value=0, node_name=symbol), pointer
+        #     else:
+        #         # This node is not a leaf.
 
-                #move pointer to the start of next node in tree
-                pointer += 1
+        #         #move pointer to the start of next node in tree
+        #         pointer += 1
 
-                # All non-leaf nodes have 2 childs
-                left, pointer = self.__decodeNode(bin, pointer, size_of_huffman_tree)
-                right, pointer = self.__decodeNode(bin, pointer, size_of_huffman_tree)
+        #         # All non-leaf nodes have 2 childs
+        #         left, pointer = self.__decodeNode(bin, pointer, size_of_huffman_tree)
+        #         right, pointer = self.__decodeNode(bin, pointer, size_of_huffman_tree)
 
-
-                return Node(node_name="", value=0, left=left, right=right), pointer
+        #         return Node(node_name="", value=0, left=left, right=right), pointer
 
 
     @classmethod
@@ -242,6 +286,9 @@ if __name__ == "__main__":
         encoded_bin = huffman.encode(test_string)
         print(len(test_string), len(encoded_bin) >> 3)
 
+    with open("testdata/bible.txt") as f:
+        test_string = f.read()
     huffman = Huffman()
-    encoded = huffman.encode("abcdefghijk", "test.bin")
-    huffman.decode("test.bin")
+    encoded = huffman.encode(test_string, "test.bin")
+    decoded = huffman.decode("test.bin")
+    print(encoded == decoded)
