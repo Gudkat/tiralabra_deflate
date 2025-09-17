@@ -76,9 +76,6 @@ class Huffman:
 
         return nodes
 
-        # Above is probably O(n) and below is O(n log n)
-        # for name, value in node_counts.items():
-        #     heapq.heappush(heap, Node(value, name))
 
     def __create_tree(self, heap: list):
         while len(heap) > 1:
@@ -115,6 +112,8 @@ class Huffman:
                 The encoding of the huffmantree has 2 bits for every symbol denoting how many bytes is used for the symbol.
                 00 for 1 byte, 01 for 2 bytes, 10 for 3 bytes and 11 for 4 bytes
             Encoded content
+
+        TODO: Move bit writing to external class
         '''
         codes = {}
         compression = bitarray()
@@ -133,9 +132,6 @@ class Huffman:
         huffman_in_bits.fill()
 
         # +7 so that the floor division for 8 emulates ceil division. 
-        # There exists method in the bitarray for this but I'm not sure 
-        # how widely I shold use premade libraries
-
         size_of_huffman_tree_int = (len(huffman_in_bits) + 7) // 8
 
         # restrict to 2 bytes. 
@@ -154,8 +150,6 @@ class Huffman:
 
         self.__save_binary_file(filename, compression)
 
-        return codes
-
     def decode(self, filename):
         '''
         Decodes huffman encoding in the format specified in encode method.
@@ -172,33 +166,16 @@ class Huffman:
         '''
 
         encoded_bits = self.__load_binary_file(filename)
-        # print("entire encoded binary", encoded_bits.to01())
 
         bit_reader = BitReader(encoded_bits)
-        # size_of_huffman_tree = int(encoded_bits[:16].to01(), 2) * 8
-        # print("size_of_huffman_tree in bits", size_of_huffman_tree)
 
-        # huffman_tree_bits = encoded_bits[16:16+size_of_huffman_tree]
         content_bits = encoded_bits[16+bit_reader.huffman_size:]
     
-        #print huffmanbits as 1's and 0's
-        # print("tree bits", huffman_tree_bits.to01())
-
-        # pointer = 0
-        # TODO: Change code reader to external class to avoid injecting pointer
-        # self.__decodeNode(huffman_tree_bits, pointer, size_of_huffman_tree)
-
-        # print("content bits", content_bits.to01())
         huffman_root = self.__decodeNode(bit_reader)
         
-        codes = {}
-        self.__create_codes(huffman_root, codes)
-
-        return codes
 
     def __encode_content(self, iterable, codes:dict, content_in_bits:bitarray):
         for symbol in iterable:
-            # print("symbol", symbol, "code", codes[symbol].to01())
             content_in_bits.extend(codes[symbol])
 
     def __encodeNode(self, node:Node, encoded_tree):
@@ -233,37 +210,6 @@ class Huffman:
             # place holder value and name. They are not really needed. Need to clean up Node class
             return Node(value=0, node_name='', left=left, right=right)
 
-        # while pointer < size_of_huffman_tree:
-        #     if bin[pointer]:
-        #         # this is a leaf
-
-        #         #move pointer to read the length of the symbol
-        #         pointer += 1
-
-        #         how_many_bytes_for_symbol = int(bin[pointer:pointer+2].to01()) + 1
-        #         how_many_bits_for_symbol = how_many_bytes_for_symbol * 8
-
-        #         # move pointer to read the actual symbol
-        #         pointer += 2
-                
-        #         symbol = bin[pointer:pointer+how_many_bits_for_symbol].tobytes().decode('utf-8')
-
-        #         # move pointer to start of next node in tree
-        #         pointer += how_many_bits_for_symbol
-
-        #         return Node(value=0, node_name=symbol), pointer
-        #     else:
-        #         # This node is not a leaf.
-
-        #         #move pointer to the start of next node in tree
-        #         pointer += 1
-
-        #         # All non-leaf nodes have 2 childs
-        #         left, pointer = self.__decodeNode(bin, pointer, size_of_huffman_tree)
-        #         right, pointer = self.__decodeNode(bin, pointer, size_of_huffman_tree)
-
-        #         return Node(node_name="", value=0, left=left, right=right), pointer
-
 
     @classmethod
     def __save_binary_file(cls, filename, bits:bitarray):
@@ -278,13 +224,6 @@ class Huffman:
         return bits
 
 if __name__ == "__main__":
-
-    if False:
-        with open("../../testdata/bible.txt") as f:
-            test_string = f.read()
-        huffman = Huffman()
-        encoded_bin = huffman.encode(test_string)
-        print(len(test_string), len(encoded_bin) >> 3)
 
     with open("testdata/bible.txt") as f:
         test_string = f.read()
