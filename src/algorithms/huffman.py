@@ -3,6 +3,9 @@ from collections import Counter
 from bitarray import bitarray
 
 
+# Filler bits encode into extra symbol in the end. Include header information for how many filler bits.
+
+
 class Node:
     def __init__(self, value, node_name, bits="", left=None, right=None):
         self.bits = bits
@@ -34,12 +37,18 @@ class Node:
 class BitReader:
     def __init__(self, binary:bitarray):
         self.binary = binary
-        self.pointer = 0
         self.huffman_size = self.__get_huffman_size()
-
+        self.filler_bits = self.__get_number_of_filler_bits()
+        self.pointer = 16 # Position at the start of huffman tree in binary
+        
     def __get_huffman_size(self):
-        self.pointer = 16
-        return int(self.binary[:16].to01(), 2) * 8
+        return int(self.binary[:13].to01(), 2)
+
+    def __get_number_of_filler_bits(self):
+        # This is filler bits at the end of the content encoding. Filler bits 
+        # after huffman tree don't affect us due to how the recursion works.
+        return int(self.binary[13:16].to01(), 2)
+
 
     def __get_length_of_next_symbol(self):
         how_many_bytes_for_symbol = int(self.binary[self.pointer:self.pointer+2].to01()) + 1
@@ -57,8 +66,57 @@ class BitReader:
         bit_value = self.binary[self.pointer]
         self.pointer += 1
         return bit_value
+    
+    def move_to_encoded_section(self):
+        self.pointer = 16 + (self.huffman_size * 8)
 
+    def bit_generator(self):
+        while self.pointer < len(self.binary) - self.filler_bits:
+            yield self.binary[self.pointer]
+            self.pointer += 1
 
+class HuffmanDeocoder:
+    def __init__(self, binary):
+        self.bit_reader = BitReader(binary)
+        self.huffman_root = self.__get_huffman_root()
+
+    def __get_huffman_root(self):
+        return self.__decodeNode()
+
+    def __decodeNode(self):
+        if self.bit_reader.next_node_is_leaf:
+            node_name_in_bytes = self.bit_reader.read_next_node()
+            node_name = node_name_in_bytes.decode('utf-8')
+            return Node(value=0, node_name=node_name)
+        else:
+            left, right = self.__decodeNode(), self.__decodeNode()
+            # place holder value and name. They are not really needed. Need to clean up Node class
+            return Node(value=0, node_name='', left=left, right=right)
+        
+    def run_decoder(self):
+        self.bit_reader.move_to_encoded_section()
+        current_node = self.huffman_root
+        bit_generator = self.bit_reader.bit_generator()
+
+        # Might be a good idea to change this to write letters straight to file one by one
+        # instead or storing to string. No reason to use extra space for it in case you 
+        # would want to compress large files (since we are using generator for this ready).
+        # Unless of course that would slow down the program. Don't think so though...
+
+        decoded = ""
+
+        for bit in bit_generator:
+            if bit == 0:
+                current_node = current_node.left
+            else:
+                current_node = current_node.right
+
+            if current_node.is_leaf:
+                decoded += current_node.name
+                current_node = self.huffman_root
+
+        return decoded
+    
 class Huffman:
     '''
     Encodes huffman coding for iterable input. encode method accepts iterables and returns a tuple; first item encoded bits and 2nd item encoding "table"
@@ -107,7 +165,8 @@ class Huffman:
     def encode(self, iterable, filename):
         '''
         Encoding format is: 
-            First 2 bytes is for the size of huffmantree in bytes
+            First 13 bits are for the size of huffmantree in bytes
+            Next 3 bits are for number of filler bits at the end of encoding
             The following is the huffmantree. 
                 The encoding of the huffmantree has 2 bits for every symbol denoting how many bytes is used for the symbol.
                 00 for 1 byte, 01 for 2 bytes, 10 for 3 bytes and 11 for 4 bytes
@@ -136,15 +195,17 @@ class Huffman:
 
         # restrict to 2 bytes. 
         # TODO: Change the size denomination to dynamic size instead of fixed 2 bytes
-        if size_of_huffman_tree_int > (1 << 16) -1:
+        if size_of_huffman_tree_int > (1 << 13) -1:
             raise ValueError(f'Compression doesnt work with this many symbols.')
 
-        how_much_space_for_huffmantree = bitarray(f'{size_of_huffman_tree_int:016b}')
+        how_much_space_for_huffmantree = bitarray(f'{size_of_huffman_tree_int:013b}')
         
         self.__encode_content(iterable, codes, content_in_bits)
-        content_in_bits.fill()
+        num_of_filler_bits = content_in_bits.fill()
+        num_of_filler_bits_as_bits = bitarray(f'{num_of_filler_bits:03b}')
 
         compression.extend(how_much_space_for_huffmantree)
+        compression.extend(num_of_filler_bits_as_bits)
         compression.extend(huffman_in_bits)
         compression.extend(content_in_bits)
 
@@ -154,7 +215,7 @@ class Huffman:
         '''
         Decodes huffman encoding in the format specified in encode method.
 
-        Example of huffman tree encoding (010001100001100011000100):
+        Example of huffman tree encoding (010001100decoder001100011000100):
             0 -not a leaf
             1 - leaf
             00 - 1 byte symbol
@@ -167,11 +228,9 @@ class Huffman:
 
         encoded_bits = self.__load_binary_file(filename)
 
-        bit_reader = BitReader(encoded_bits)
+        decoder = HuffmanDeocoder(encoded_bits)
+        return decoder.run_decoder()
 
-        content_bits = encoded_bits[16+bit_reader.huffman_size:]
-    
-        huffman_root = self.__decodeNode(bit_reader)
         
 
     def __encode_content(self, iterable, codes:dict, content_in_bits:bitarray):
@@ -200,17 +259,6 @@ class Huffman:
             self.__encodeNode(node.left, encoded_tree)
             self.__encodeNode(node.right, encoded_tree)
 
-    def __decodeNode(self, bit_reader: BitReader):
-        if bit_reader.next_node_is_leaf:
-            node_name_in_bytes = bit_reader.read_next_node()
-            node_name = node_name_in_bytes.decode('utf-8')
-            return Node(value=0, node_name=node_name)
-        else:
-            left, right = self.__decodeNode(bit_reader), self.__decodeNode(bit_reader)
-            # place holder value and name. They are not really needed. Need to clean up Node class
-            return Node(value=0, node_name='', left=left, right=right)
-
-
     @classmethod
     def __save_binary_file(cls, filename, bits:bitarray):
         with open(filename, 'wb') as file:
@@ -225,9 +273,11 @@ class Huffman:
 
 if __name__ == "__main__":
 
-    with open("testdata/bible.txt") as f:
+    with open("testdata/fields.c") as f:
         test_string = f.read()
     huffman = Huffman()
-    encoded = huffman.encode(test_string, "test.bin")
-    decoded = huffman.decode("test.bin")
-    print(encoded == decoded)
+    huffman.encode(test_string, "test.bin")
+    ret = huffman.decode("test.bin")
+    print(len(test_string), len(ret))
+    print(test_string[-100:], ret[-100:])
+    print(test_string == ret)
