@@ -3,9 +3,6 @@ from collections import Counter
 from bitarray import bitarray
 
 
-# Filler bits encode into extra symbol in the end. Include header information for how many filler bits.
-
-
 class Node:
     def __init__(self, value, node_name, bits="", left=None, right=None):
         self.bits = bits
