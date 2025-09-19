@@ -7,3 +7,5 @@ This repository is a practical course work for the course TKT20010 (Aineopintoje
 ## Weekly reports
 
 * [Week 1](documentation/Weekly_reports/week1.md)
+* [Week 2](documentation/Weekly_reports/week2.md)
+* [Week 3](documentation/Weekly_reports/week3.md)
