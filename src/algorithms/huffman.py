@@ -2,6 +2,11 @@ import heapq
 from collections import Counter
 from bitarray import bitarray
 
+class NoBitsToDecode(Exception):
+    pass
+
+class EmptyStringEncoding(Exception):
+    pass
 
 class Node:
     def __init__(self, value, node_name, bits="", left=None, right=None):
@@ -34,6 +39,10 @@ class Node:
 class BitReader:
     def __init__(self, binary:bitarray):
         self.binary = binary
+
+        if len(self.binary) <= 16:
+            raise NoBitsToDecode
+
         self.huffman_size = self.__get_huffman_size()
         self.filler_bits = self.__get_number_of_filler_bits()
         self.pointer = 16 # Position at the start of huffman tree in binary
@@ -114,14 +123,18 @@ class FileHandler:
 
 
 class HuffmanEncoder:
-    def __init__(self):
+    def __init__(self, iterable:str):
+        if len(iterable) == 0:
+            raise EmptyStringEncoding
+        
+        self.iterable = iterable
         self.bit_writer = BitWriter()
         self.huffman_size = 0
 
-    def encode(self, iterable) -> bitarray:
+    def encode(self) -> bitarray:
         self.codes = {}
 
-        heap = self.__iterable_to_heap(iterable)
+        heap = self.__iterable_to_heap(self.iterable)
         huffman_root = self.__create_tree(heap)
         self.__create_codes(huffman_root)
 
@@ -129,7 +142,7 @@ class HuffmanEncoder:
         self.__set_huffman_tree_size_bits(huffman_bits)
 
         self.bit_writer.extend(huffman_bits)
-        self.__encode_content(iterable)
+        self.__encode_content(self.iterable)
         self.bit_writer.add_padding()
 
         return self.bit_writer.binary
@@ -232,7 +245,7 @@ class HuffmanDeocoder:
             return Node(value=0, node_name=node_name)
         else:
             left, right = self.__decodeNode(), self.__decodeNode()
-            # place holder value and name. They are not really needed. Need to clean up Node class
+            # TODO: place holder value and name. They are not really needed. Need to clean up Node class
             return Node(value=0, node_name='', left=left, right=right)
         
     def decode(self):
