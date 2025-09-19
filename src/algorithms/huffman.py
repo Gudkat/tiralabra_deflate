@@ -307,18 +307,23 @@ class Huffman:
                 00 for 1 byte, 01 for 2 bytes, 10 for 3 bytes and 11 for 4 bytes
             Encoded content
         '''
-        encoder = HuffmanEncoder()
-        binary = encoder.encode(iterable)
+        try:
+            binary  = HuffmanEncoder(iterable).encode()
+        except EmptyStringEncoding:
+            binary = BitWriter().binary
+
         self.filehandler.save_binary_file(filename, binary)
 
     def decode(self, filename):
         encoded_bits = self.filehandler.load_binary_file(filename)
-        decoder = HuffmanDeocoder(encoded_bits)
-        return decoder.decode()
 
+        try:
+            return HuffmanDeocoder(encoded_bits).decode()
+        except NoBitsToDecode:
+            return ''
+        
 
 if __name__ == "__main__":
-
     with open("testdata/bible.txt") as f:
         test_string = f.read()
     huffman = Huffman()
